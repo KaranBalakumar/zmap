@@ -1,16 +1,23 @@
 #include <librealsense2/rs.hpp> // Include RealSense Cross Platform API
-#include "/home/karan/librealsense/examples/example.hpp"          // Include short list of convenience functions for rendering
-
+#include "render.hpp"          // Include short list of convenience functions for rendering
 #include <algorithm>            // std::min, std::max
 #include <fstream>              // std::ifstream
+#include <Eigen/Core>
+#include <Eigen/Geometry>
 
 // Helper functions
 void register_glfw_callbacks(window& app, glfw_state& app_state);
 
-void draw_pointcloud_in_world(float width, float height, glfw_state& app_state, rs2::points& points, rs2_pose& pose, float H_t265_d400[16], std::vector<rs2_vector>& trajectory);
+void draw_pointcloud_in_world(float width, float height, glfw_state& app_state, rs2::points& points, rs2_pose& pose, float H_t265_d400[16], std::vector<rs2_vector>& trajectory,
+                                Eigen::Matrix<double, 3, 1> &p, std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> &pointcloud);
 
 float detR(float H[16]) {
     return H[0]*(H[5]*H[10]-H[9]*H[6]) - H[4]*(H[1]*H[10]-H[2]*H[9]) + H[8]*(H[1]*H[6]-H[5]*H[2]);
+}
+
+Eigen::Matrix3d reorthogonalize(const Eigen::Matrix3d &R) {
+    Eigen::JacobiSVD<Eigen::Matrix3d> svd(R, Eigen::ComputeFullU | Eigen::ComputeFullV);
+    return svd.matrixU() * svd.matrixV().transpose();
 }
 
 int main(int argc, char * argv[]) try
@@ -77,34 +84,21 @@ int main(int argc, char * argv[]) try
         return -1;
     }
 
+    Eigen::Matrix<double, 3, 1> p;
+    std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> pointcloud;
+    pointcloud.reserve(1000000);
+
     while (app) // Application still alive?
     {
         for (auto &&pipe : pipelines) // loop over pipelines
         {
             // Wait for the next set of frames from the camera
             auto frames = pipe.wait_for_frames();
-
-
-            // auto color = frames.get_color_frame();
-
-            // // For cameras that don't have RGB sensor, we'll map the pointcloud to infrared instead of color
-            // if (!color)
-            //     color = frames.get_infrared_frame();
-
-            // // Tell pointcloud object to map to this color frame
-            // if (color)
-            //     pc.map_to(color);
-
             auto depth = frames.get_depth_frame();
 
             // Generate the pointcloud and texture mappings
             if (depth)
                 points = pc.calculate(depth);
-
-            // Upload the color frame to OpenGL
-            // if (color)
-            //     app_state.tex.upload(color);
-
 
             // pose
             auto pose = frames.get_pose_frame();
@@ -130,7 +124,7 @@ int main(int argc, char * argv[]) try
         // Draw the pointcloud
         if (points && pose_frame) {
             rs2_pose pose =  pose_frame.get_pose_data();
-            draw_pointcloud_in_world(app.width(), app.height(), app_state, points, pose, H_t265_d400, trajectory);
+            draw_pointcloud_in_world(app.width(), app.height(), app_state, points, pose, H_t265_d400, trajectory, p, pointcloud);
         }
     }
 
@@ -147,7 +141,8 @@ catch (const std::exception & e)
     return EXIT_FAILURE;
 }
 
-void draw_pointcloud_in_world(float width, float height, glfw_state& app_state, rs2::points& points, rs2_pose& pose, float H_t265_d400[16], std::vector<rs2_vector>& trajectory){
+void draw_pointcloud_in_world(float width, float height, glfw_state& app_state, rs2::points& points, rs2_pose& pose, float H_t265_d400[16], std::vector<rs2_vector>& trajectory,
+                                Eigen::Matrix<double, 3, 1> &p, std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> &pointcloud){
     if (!points)
         return;
 
@@ -186,42 +181,51 @@ void draw_pointcloud_in_world(float width, float height, glfw_state& app_state, 
     glLineWidth(0.5f);
     glColor3f(1.0f, 1.0f, 1.0f);
 
-    // T265 pose
-    GLfloat H_world_t265[16];
-    quat2mat(pose.rotation, H_world_t265);
-    H_world_t265[12] = pose.translation.x;
-    H_world_t265[13] = pose.translation.y;
-    H_world_t265[14] = pose.translation.z;
+    Eigen::Quaterniond q;
+    q.w() = pose.rotation.w;
+    q.x() = pose.rotation.x;
+    q.y() = pose.rotation.y;
+    q.z() = pose.rotation.z;
+    Eigen::Vector3d t(pose.translation.x, pose.translation.y, pose.translation.z);
+    Eigen::Isometry3d T = Eigen::Isometry3d::Identity();
+    T.rotate(q);
+    T.pretranslate(t);
 
-    glMultMatrixf(H_world_t265);
 
-    // T265 to D4xx extrinsics
-    glMultMatrixf(H_t265_d400);
+    Eigen::Matrix3d R_;
+    R_ << H_t265_d400[0], H_t265_d400[1], H_t265_d400[2],
+          H_t265_d400[4], H_t265_d400[5], H_t265_d400[6],
+          H_t265_d400[8], H_t265_d400[9], H_t265_d400[10];
+    R_ = reorthogonalize(R_);
+    Eigen::Vector3d t_(H_t265_d400[3], H_t265_d400[7], H_t265_d400[11]);
+    Eigen::Isometry3d T_ = Eigen::Isometry3d::Identity();
+    T_.rotate(R_);
+    T_.pretranslate(t_);
 
+    pointcloud.clear();
+    const auto vertices = points.get_vertices();
+    size_t count = points.size();
+
+    for (size_t i = 0; i < count; i++) {
+        const rs2::vertex& vertex = vertices[i]; // Corrected type
+        p[0] = vertex.x;
+        p[1] = vertex.y;
+        p[2] = vertex.z;
+
+        Eigen::Vector3d pointWorld = T_ * p;
+        pointWorld = T * pointWorld;
+        pointcloud.push_back(pointWorld); // Store transformed point
+    }
 
     // glPointSize(width / 640);
     glPointSize(0.005);
     glColor3f(150.0, 150.0, 150.0);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_TEXTURE_2D);
-    // glBindTexture(GL_TEXTURE_2D, app_state.tex.get_gl_handle());
-    // float tex_border_color[] = { 0.8f, 0.8f, 0.8f, 0.8f };
-    // glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, tex_border_color);
-    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, 0x812F); // GL_CLAMP_TO_EDGE
-    // glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, 0x812F); // GL_CLAMP_TO_EDGE
     glBegin(GL_POINTS);
 
-    /* this segment actually prints the pointcloud */
-    auto vertices = points.get_vertices();              // get vertices
-    // auto tex_coords = points.get_texture_coordinates(); // and texture coordinates
-    for (int i = 0; i < points.size(); i++)
-    {
-        if (vertices[i].z)
-        {
-            // upload the point and texture coordinates only for points we have depth data for
-            glVertex3fv(vertices[i]);
-            // glTexCoord2fv(tex_coords[i]);
-        }
+    for (const auto &point : pointcloud) {
+        glVertex3d(point[0], point[1], point[2]);
     }
 
     // OpenGL cleanup

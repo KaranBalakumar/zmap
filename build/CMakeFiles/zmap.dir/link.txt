@@ -1,1 +1,1 @@
-/usr/bin/c++ -O3 -DNDEBUG -rdynamic CMakeFiles/zmap.dir/zmap.cpp.o -o zmap  -lrealsense2 -lglfw -lGL -lGLU
+/usr/bin/c++ -O3 -O3 -DNDEBUG -rdynamic CMakeFiles/zmap.dir/zmap.cpp.o -o zmap  -lrealsense2 -lglfw -lGL -lGLU

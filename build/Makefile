@@ -142,6 +142,19 @@ zmap_test/fast:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/zmap_test.dir/build.make CMakeFiles/zmap_test.dir/build
 .PHONY : zmap_test/fast
 
+#=============================================================================
+# Target rules for targets named zmap_pango
+
+# Build rule for target.
+zmap_pango: cmake_check_build_system
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/Makefile2 zmap_pango
+.PHONY : zmap_pango
+
+# fast build rule for target.
+zmap_pango/fast:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/zmap_pango.dir/build.make CMakeFiles/zmap_pango.dir/build
+.PHONY : zmap_pango/fast
+
 zmap.o: zmap.cpp.o
 .PHONY : zmap.o
 
@@ -165,6 +178,30 @@ zmap.s: zmap.cpp.s
 zmap.cpp.s:
 	$(MAKE) $(MAKESILENT) -f CMakeFiles/zmap.dir/build.make CMakeFiles/zmap.dir/zmap.cpp.s
 .PHONY : zmap.cpp.s
+
+zmap_pango.o: zmap_pango.cpp.o
+.PHONY : zmap_pango.o
+
+# target to build an object file
+zmap_pango.cpp.o:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/zmap_pango.dir/build.make CMakeFiles/zmap_pango.dir/zmap_pango.cpp.o
+.PHONY : zmap_pango.cpp.o
+
+zmap_pango.i: zmap_pango.cpp.i
+.PHONY : zmap_pango.i
+
+# target to preprocess a source file
+zmap_pango.cpp.i:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/zmap_pango.dir/build.make CMakeFiles/zmap_pango.dir/zmap_pango.cpp.i
+.PHONY : zmap_pango.cpp.i
+
+zmap_pango.s: zmap_pango.cpp.s
+.PHONY : zmap_pango.s
+
+# target to generate assembly for a file
+zmap_pango.cpp.s:
+	$(MAKE) $(MAKESILENT) -f CMakeFiles/zmap_pango.dir/build.make CMakeFiles/zmap_pango.dir/zmap_pango.cpp.s
+.PHONY : zmap_pango.cpp.s
 
 zmap_test.o: zmap_test.cpp.o
 .PHONY : zmap_test.o
@@ -199,10 +236,14 @@ help:
 	@echo "... edit_cache"
 	@echo "... rebuild_cache"
 	@echo "... zmap"
+	@echo "... zmap_pango"
 	@echo "... zmap_test"
 	@echo "... zmap.o"
 	@echo "... zmap.i"
 	@echo "... zmap.s"
+	@echo "... zmap_pango.o"
+	@echo "... zmap_pango.i"
+	@echo "... zmap_pango.s"
 	@echo "... zmap_test.o"
 	@echo "... zmap_test.i"
 	@echo "... zmap_test.s"

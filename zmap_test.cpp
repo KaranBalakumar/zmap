@@ -8,19 +8,28 @@
 #include <sophus/se3.hpp>
 #include <pangolin/pangolin.h>
 
+Eigen::Matrix3d reorthogonalize(const Eigen::Matrix3d &R) {
+    Eigen::JacobiSVD<Eigen::Matrix3d> svd(R, Eigen::ComputeFullU | Eigen::ComputeFullV);
+    return svd.matrixU() * svd.matrixV().transpose();
+}
+
 Sophus::SE3d getT(const auto &pose, const auto &T_t265_d400){
     Eigen::Quaterniond q;
-    Sophus::Vector3d t(pose.translation.x, -1.0 * pose.translation.y, -1.0 * pose.translation.z);
+    Sophus::Vector3d t(pose.translation.x, pose.translation.y, -1.0 * pose.translation.z);
     q.w() = pose.rotation.w;
     q.x() = pose.rotation.x;
     q.y() = pose.rotation.y;
     q.z() = pose.rotation.z;
     Sophus::SE3d T(q,t);
     // Eigen::Matrix3d R_ = Eigen::AngleAxisd(M_PI, Eigen::Vector3d(0,1,0)).toRotationMatrix();
-    Eigen::Matrix3d R_ = Eigen::AngleAxisd(0, Eigen::Vector3d(0,1,0)).toRotationMatrix();
-    Eigen::Vector3d t_(0, 0, 0);
+    Eigen::Matrix3d R_;
+    R_ << T_t265_d400[0], T_t265_d400[1], T_t265_d400[2]
+        , T_t265_d400[4], T_t265_d400[5], T_t265_d400[6]
+        , T_t265_d400[8], T_t265_d400[9], T_t265_d400[10];
+    R_ = reorthogonalize(R_);
+    Eigen::Vector3d t_(T_t265_d400[3], T_t265_d400[7], T_t265_d400[11]);
     Sophus::SE3d Tconv(R_, t_);
-    return  Tconv * T;
+    return  T*Tconv;
 
 }
 
@@ -144,7 +153,7 @@ int main(int argc, char * argv[])
                 }else{
                     rs2_vector prev = trajectory.back();
                     rs2_vector curr = pose_data.translation;
-                    // trajectory.push_back(curr);
+                    trajectory.push_back(curr);
                     glBegin(GL_LINES);
                     glColor3f(255.0, 0.0, 0.0);
                     glVertex3d(prev.x, prev.y, prev.z);
@@ -178,19 +187,13 @@ int main(int argc, char * argv[])
                 // p1[0] = p[0];
                 // p1[1] = p[1];
                 // p1[2] = p[2];
-                Eigen::Vector3d pointWorld = T.inverse() * p;
+                Eigen::Vector3d pointWorld = T * p;
                 pointcloud.push_back(pointWorld); // Store transformed point
             }
-            Sophus::Vector3d dummy(0,0,0);
-            Eigen::Matrix3d R_dummy = Eigen::AngleAxisd(0 , Eigen::Vector3d(0,0,1)).toRotationMatrix();
-            // std::cout << R_dummy.matrix() << std::endl;
-            Sophus::SE3d T1(R_dummy, dummy);
-            pangolin::OpenGlMatrix m( T1.inverse().matrix());
-            // std::cout << count << " " << pointcloud.size() << std::endl;
 
             // Activate the camera and render the new point cloud
             glPointSize(0.025);
-            s_cam.Follow(m, true);
+            // s_cam.Follow(m, true);
             glBegin(GL_POINTS);
             for (const auto &point : pointcloud) {
                 glVertex3d(point[0], point[1], point[2]);
