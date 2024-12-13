@@ -6,6 +6,9 @@
 #include <Eigen/Geometry>
 #include <vector>
 
+#include <matplot/matplot.h>
+#include <boost/concept_check.hpp>
+
 // Helper functions
 void register_glfw_callbacks(window& app, glfw_state& app_state);
 
@@ -94,7 +97,9 @@ int main(int argc, char * argv[]) try
 
     Eigen::Matrix<double, 3, 1> p;
     std::vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> pointcloud;
-    pointcloud.reserve(1000000);
+    pointcloud.reserve(100000);
+
+
 
     while (app) // Application still alive?
     {
@@ -115,7 +120,7 @@ int main(int argc, char * argv[]) try
 
                 // Print the x, y, z values of the translation, relative to initial position
                 auto pose_data = pose.get_pose_data();
-                std::cout << "\r" << "Device Position: " << std::setprecision(3) << std::fixed << pose_data.translation.x << " " << pose_data.translation.y << " " << pose_data.translation.z << " (meters)";
+                // std::cout << "\r" << "Device Position: " << std::setprecision(3) << std::fixed << pose_data.translation.x << " " << pose_data.translation.y << " " << pose_data.translation.z << " (meters)";
 
                 // add new point in the trajectory (if motion large enough to reduce size of traj. vector)
                 if (trajectory.size() == 0)
@@ -133,6 +138,15 @@ int main(int argc, char * argv[]) try
         if (points && pose_frame) {
             rs2_pose pose =  pose_frame.get_pose_data();
             draw_pointcloud_in_world(app.width(), app.height(), app_state, points, pose, H_t265_d400, trajectory, p, pointcloud);
+
+            std::ofstream file("/home/karan/zmap/data.txt");
+            for (int i = 0; i < rows; i++) {
+                for (int j = 0; j < cols; j++) {
+                    file << i << " " << j << " " << double(GRID[i][j]) << "\n";
+                }
+            }
+            file.close();
+            // system("gnuplot -e \"splot 'data.txt' using 1:2:3 with pm3d\"");
         }
     }
 
@@ -213,6 +227,7 @@ void draw_pointcloud_in_world(float width, float height, glfw_state& app_state, 
     pointcloud.clear();
     const auto vertices = points.get_vertices();
     size_t count = points.size();
+    int x_index, y_index;
 
     for (size_t i = 0; i < count; i++) {
         const rs2::vertex& vertex = vertices[i]; // Corrected type
@@ -220,10 +235,15 @@ void draw_pointcloud_in_world(float width, float height, glfw_state& app_state, 
         p[1] = vertex.y;
         p[2] = vertex.z;
 
-        Eigen::Vector3d pointWorld = T_ * p;
-        pointWorld = T * pointWorld;
-        grid[pointWorld[0]/d][pointWorld[1]/d] += pointWorld[2];
-        gridc[pointWorld[0]/d][pointWorld[1]/d] += 1;
+        Eigen::Vector3d pointWorld = T * (T_ * p);
+        x_index = int(pointWorld[0]/d) + 50;
+        y_index = int(pointWorld[1]/d) + 50;
+        if (x_index >= 0 && x_index < rows && y_index >= 0 && y_index < cols) {
+            grid[x_index][y_index] += pointWorld[2];
+            gridc[x_index][y_index] += 1;
+        }
+        // grid[int(pointWorld(0)/d) + 50][int(pointWorld(1)/d) + 50] += pointWorld[2];
+        // gridc[int(pointWorld(0)/d) + 50][int(pointWorld(1)/d) + 50] += 1;
         pointcloud.push_back(pointWorld); // Store transformed point
     }
 
@@ -237,14 +257,18 @@ void draw_pointcloud_in_world(float width, float height, glfw_state& app_state, 
 
     for (const auto &point : pointcloud) {
         glVertex3d(point[0], point[1], point[2]);
+        // std::cout << point[0] << " " << point[1] << " " << point[2] << std::endl;
     }
 
     // OpenGL cleanup
     glEnd();
 
     for(int i=0; i<rows; i++){
-        for(int j=0; j<cols; j++)
-            GRID[i][j] = grid[i][j] / gridc[i][j];
+        for(int j=0; j<cols; j++){
+            if(gridc[i][j] > 0)
+                GRID[i][j] = grid[i][j] / double(gridc[i][j]);
+            std::cout << i << " " << j << " " << grid[i][j]<< " / " << gridc[i][j] << " = " << GRID[i][j] << std::endl;
+        }
     }
 
     glPopMatrix();

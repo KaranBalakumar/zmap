@@ -4,6 +4,10 @@ project(zmap)
 find_package(OpenGL REQUIRED)
 find_package(Sophus REQUIRED)
 find_package(Pangolin REQUIRED)
+find_package(Python3 COMPONENTS Interpreter Development)
+find_package(NumPy)
+
+find_package(Matplot++ REQUIRED)
 
 set(CMAKE_BUILD_TYPE "Release")
 set(CMAKE_CXX_FLAGS "-O3")
@@ -22,3 +26,6 @@ target_link_libraries(zmap_test realsense2 glfw ${OPENGL_LIBRARIES} ${Pangolin_L
 add_executable(zmap_pango zmap_pango.cpp /home/karan/librealsense-2.51.1/examples/example.hpp)
 set_property(TARGET zmap_pango PROPERTY CXX_STANDARD 20)
 target_link_libraries(zmap_pango realsense2 glfw ${OPENGL_LIBRARIES} ${Pangolin_LIBRARIES} Sophus::Sophus)
+
+add_executable(test test.cpp render.hpp)
+target_link_libraries(test Matplot++::matplot realsense2 glfw ${OPENGL_LIBRARIES})

@@ -1,5 +1,0 @@
-/home/karan/zmap/build/CMakeFiles/zmap.dir
-/home/karan/zmap/build/CMakeFiles/zmap_test.dir
-/home/karan/zmap/build/CMakeFiles/zmap_pango.dir
-/home/karan/zmap/build/CMakeFiles/edit_cache.dir
-/home/karan/zmap/build/CMakeFiles/rebuild_cache.dir

@@ -15,7 +15,7 @@ Eigen::Matrix3d reorthogonalize(const Eigen::Matrix3d &R) {
 
 Sophus::SE3d getT(const auto &pose, const auto &T_t265_d400){
     Eigen::Quaterniond q;
-    Sophus::Vector3d t(pose.translation.x, pose.translation.y, -1.0 * pose.translation.z);
+    Sophus::Vector3d t(pose.translation.x, pose.translation.y, pose.translation.z);
     q.w() = pose.rotation.w;
     q.x() = pose.rotation.x;
     q.y() = pose.rotation.y;
@@ -37,6 +37,13 @@ float detR(float H[16]) {
     return H[0]*(H[5]*H[10]-H[9]*H[6]) - H[4]*(H[1]*H[10]-H[2]*H[9]) + H[8]*(H[1]*H[6]-H[5]*H[2]);
 }
 
+double d = 0.05;
+int rows=100;
+int cols=100;
+std::vector<std::vector<double>> grid(rows, std::vector<double>(cols, 0));
+std::vector<std::vector<int>> gridc(rows, std::vector<int>(cols, 0));
+std::vector<std::vector<double>> GRID(rows, std::vector<double>(cols, 0));
+
 int main(int argc, char * argv[])   
 {
     pangolin::CreateWindowAndBind("Point Cloud Viewer", 1024, 768);
@@ -53,8 +60,6 @@ int main(int argc, char * argv[])
         .SetBounds(0.0, 1.0, 0.0, 1.0, -1024.0f / 768.0f)
         .SetHandler(new pangolin::Handler3D(s_cam));
 
-    
-    
     // Declare pointcloud object, for calculating pointclouds and texture mappings
     rs2::pointcloud pc;
     // We want the points object to be persistent so we can display the last cloud when a frame drops
@@ -64,7 +69,7 @@ int main(int argc, char * argv[])
 
     std::vector<rs2_vector> trajectory;
 
-    rs2::context                          ctx;        // Create librealsense context for managing devices
+    rs2::context ctx;        // Create librealsense context for managing devices
     // std::map<std::string, rs2::colorizer> colorizers; // Declare map from device serial number to colorizer (utility class to convert depth data RGB colorspace)
     std::vector<rs2::pipeline>            pipelines;
 
@@ -82,8 +87,6 @@ int main(int argc, char * argv[])
         cfg.enable_device(serial);
         pipe.start(cfg);
         pipelines.emplace_back(pipe);
-        // Map from each device's serial number to a different colorizer
-        // colorizers[serial] = rs2::colorizer();
     }
 
     // extrinsics
@@ -116,15 +119,6 @@ int main(int argc, char * argv[])
     pointcloud.reserve(1000000);
     Sophus::SE3d T;
 
-    // Eigen::Matrix3d R1;
-    // R1(0, 0) = H_t265_d400[0]; R1(0, 1) = H_t265_d400[1]; R1(0, 2) = H_t265_d400[2];
-    // R1(1, 0) = H_t265_d400[4]; R1(1, 1) = H_t265_d400[5]; R1(1, 2) = H_t265_d400[6];
-    // R1(2, 0) = H_t265_d400[8]; R1(2, 1) = H_t265_d400[9]; R1(1, 2) = H_t265_d400[10];
-
-    // Eigen::Vector3d t__(H_t265_d400[3], H_t265_d400[7], H_t265_d400[11]);
-
-    // Sophus::SE3d T_t265_d400(R1, t__);
-
     while (pangolin::ShouldQuit() == false) // Application still alive?
     {
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -154,19 +148,17 @@ int main(int argc, char * argv[])
                     rs2_vector prev = trajectory.back();
                     rs2_vector curr = pose_data.translation;
                     trajectory.push_back(curr);
-                    glBegin(GL_LINES);
-                    glColor3f(255.0, 0.0, 0.0);
-                    glVertex3d(prev.x, prev.y, prev.z);
-                    glVertex3d(curr.x, curr.y, curr.z);
-                    // for(size_t i=0; i < trajectory.size(); i++){
-                    //     auto p1 = trajectory[i], p2 = trajectory[i+1];
-                    //     glVertex3d(p1.x, p1.y, p1.z);
-                    //     glVertex3d(p2.x, p2.y, p2.z);
-                    // }
-                    glColor3f(255.0, 255.0, 255.0);
-                    glEnd();   
+                    glEnable(GL_DEPTH_TEST);
+                    glLineWidth(2.0f);
+                    glBegin(GL_LINE_STRIP);
+                    for (auto&& v : trajectory)
+                    {
+                        glColor3f(0.0f, 1.0f, 0.0f);
+                        glVertex3f(v.x, v.y, v.z);
+                    }
+                    glEnd();
+                    glColor3f(1.0f, 1.0f, 1.0f);  
                 }
-                // std::cout << T.matrix3x4() << std::endl;
             }
         }
 
@@ -177,33 +169,59 @@ int main(int argc, char * argv[])
             // Get the number of points
             const auto vertices = points.get_vertices();
             size_t count = points.size();
+            int x_index, y_index;
 
             for (size_t i = 0; i < count; i++) {
                 const rs2::vertex& vertex = vertices[i]; // Corrected type
-                p[0] = vertex.x;
+                p[2] = -1.0 * vertex.x;
                 p[1] = vertex.y;
-                p[2] = vertex.z;
-                // Eigen::Vector3d p1;
-                // p1[0] = p[0];
-                // p1[1] = p[1];
-                // p1[2] = p[2];
+                p[0] = vertex.z;
+
                 Eigen::Vector3d pointWorld = T * p;
+                
+                // std::cout << pointWorld[0] / d << " " << pointWorld[1] / d  << std::endl;
+                x_index = int(double(pointWorld[0])/d) + int(rows/2);
+                y_index = int(pointWorld[1]/d) + int(cols/2);
+                // std::cout << x_index << " " << y_index << std::endl;
+                // std::cout << "X - " << pointWorld[0]/d << " - " << int(pointWorld[0]/d) << std::endl;
+                if (x_index >= 0 && x_index < rows && y_index >= 0 && y_index < cols) {
+                    grid[x_index][y_index] += pointWorld[2];
+                    gridc[x_index][y_index]++;
+                }
                 pointcloud.push_back(pointWorld); // Store transformed point
             }
-
+            Eigen::Vector3d pointWorld = T * p;
+            std::ofstream file("/home/karan/zmap/data.txt");
+            
+            
             // Activate the camera and render the new point cloud
             glPointSize(0.025);
-            // s_cam.Follow(m, true);
             glBegin(GL_POINTS);
             for (const auto &point : pointcloud) {
                 glVertex3d(point[0], point[1], point[2]);
+                file << point[0] << " " << point[1] << " " << point[2] << "\n";
             }
+            file.close();
+            
             glEnd();
             pangolin::FinishFrame();
-        }
 
-        // Optional: Add a sleep to control the output rate
-        // std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            for(int i=0; i<rows; i++){
+                for(int j=0; j<cols; j++){
+                    if(gridc[i][j] > 0)
+                        GRID[i][j] = double(grid[i][j] / double(gridc[i][j]));
+                    // std::cout << i << " " << j << " " << grid[i][j]<< " / " << gridc[i][j] << " = " << GRID[i][j] << std::endl;
+                }
+            }
+
+            // std::ofstream file("/home/karan/zmap/data.txt");
+            // for (int i = 0; i < rows; i++) {
+            //     for (int j = 0; j < cols; j++) {
+            //         file << i << " " << j << " " << GRID[i][j] << "\n";
+            //     }
+            // }
+            // file.close();
+        }
     }
 
     return EXIT_SUCCESS;
