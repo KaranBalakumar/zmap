@@ -7,5 +7,12 @@ set(CMAKE_CXX_FLAGS "-O3")
 
 include_directories("/usr/include/eigen3")
 
-add_subdirectory(rerun_cpp_sdk) # using 0.22.1
+find_package(realsense2 REQUIRED)
+include_directories(${realsense2_INCLUDE_DIR})
+
+# add_subdirectory(rerun_cpp_sdk) # using 0.22.1
+include(FetchContent)
+FetchContent_Declare(rerun_sdk URL
+    https://github.com/rerun-io/rerun/releases/download/0.22.1/rerun_cpp_sdk.zip)
+FetchContent_MakeAvailable(rerun_sdk)
 add_subdirectory(src)
